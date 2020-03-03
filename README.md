@@ -1,4 +1,4 @@
-# group_letter_moneyandpolitics
+# group_I_moneyandpolitics
 
 Ideas For Data Viz Project
 Data sources:
