@@ -1,0 +1,239 @@
+---
+title: "Final Project"
+author: "Elliott Tran (eat2153)"
+date: "4/25/2020"
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(plyr)
+```
+
+
+
+```{r}
+lob_issue <- read_csv("OpenSecrets_lobby-data/lob_issue.txt", quote ="|,|",
+                      col_names = FALSE)
+lob_issue <- rename(lob_issue, c('X1' = "SI_ID", "X2" = "Uniqid", 
+                                 "X3" = "IssueID", "X4" = "Issue", 
+                                 "X5" = "SpecificIssue", "X6" = "Year"))
+
+
+lob_lobbying <- read_csv("OpenSecrets_lobby-data/lob_lobbying.txt", quote ="|,|",
+                         col_names = FALSE)
+lob_lobbying <- rename(lob_lobbying, c('X1' = "Uniqid", "X2" = "Registrant_raw", 
+                                       "X3" = "Registrant", "X4" = "Isfirm", 
+                                       "X5" = "Client_raw", "X6" = "Client", "X7" = "Ultorg", 
+                                       "X8" = "Amount", "X9" = "Catcode", "X10" = "Source", 
+                                       "X11" = "Self", "X12" = "IncludeNSFS", "X13" = "Use", 
+                                       "X14" = "Ind", "X15" = "Year", "X16" = "Type", 
+                                       "X17" = "Typelong", "X18" = "Affiliate"))
+
+
+lob_lobbyist <- read_csv("OpenSecrets_lobby-data/lob_lobbyist.txt", quote ="|,|",
+                         col_names = FALSE)
+lob_lobbyist <- rename(lob_lobbyist, c('X1' = "Uniqid", "X2" = "Lobbyist_raw", 
+                                       "X3" = "Lobbyist", "X4" = "Lobbyist_id", 
+                                       "X5" = "Year", "X6" = "OfficialPosition", "X7" = "CID", 
+                                       "X8" = "Formercongmem"))
+
+
+
+lob_agency <- read_csv("OpenSecrets_lobby-data/lob_agency.txt", quote ="|,|",
+                       col_names = FALSE)
+
+lob_agency <- rename(lob_agency, c('X1' = "Uniqid", "X2" = "AgencyID", 
+                                   "X3" = "Agency"))
+```
+
+
+```{r}
+merge_df <- inner_join(lob_lobbying, lob_lobbyist, by = "Uniqid")
+```
+
+
+```{r}
+df_2018 <- merge_df %>%
+  filter(Year.x == 2018) %>%
+  filter(Isfirm == "y") 
+```
+
+```{r}
+names2018 <- df_2018 %>%
+  select(Lobbyist_id, Lobbyist, Registrant, Client) %>%
+  dplyr::distinct(Lobbyist_id, .keep_all = TRUE)
+```
+
+```{r}
+agg2018 <- df_2018 %>%
+  dplyr::select(Lobbyist_id, Amount) 
+
+agg2018 <- aggregate(. ~ Lobbyist_id, data = agg2018, FUN = sum)
+```
+
+```{r}
+agg2018 <- full_join(names2018, agg2018, by = "Lobbyist_id") 
+
+```
+
+```{r}
+agg2018 <- agg2018 %>%
+  top_n(50) 
+```
+
+
+
+# Social Network Analysis
+
+```{r}
+library(network)
+library(igraph)
+```
+
+```{r}
+lobby_id <- agg2018 %>%
+  distinct(Lobbyist) %>%
+  dplyr::rename(label = Lobbyist)
+```
+
+```{r}
+registrant <- agg2018 %>%
+  distinct(Registrant) %>%
+  dplyr::rename(label = Registrant)
+```
+
+```{r}
+client <- agg2018 %>%
+  distinct(Client) %>%
+  dplyr::rename(label = Client)
+```
+
+
+```{r}
+nodes <- full_join(lobby_id, client, by = "label") %>% 
+  rowid_to_column("id")
+nodes
+```
+
+```{r}
+lobby_registrant <- agg2018 %>%  
+  group_by(Lobbyist, Client) %>%
+  dplyr::summarise(weight = n()) %>% 
+  ungroup()
+lobby_registrant
+```
+
+
+```{r}
+edges <- lobby_registrant %>% 
+  left_join(nodes, by = c("Lobbyist" = "label")) %>% 
+  dplyr::rename(from = id)
+
+edges <- edges %>% 
+  left_join(nodes, by = c("Client" = "label")) %>% 
+  dplyr::rename(to = id)
+
+edges <- select(edges, from, to, weight)
+
+
+edges 
+
+```
+
+
+
+```{r}
+routes_network <- network(edges, vertex.attr = nodes, matrix.type = "edgelist", ignore.eval = FALSE)
+```
+
+```{r}
+class(routes_network)
+```
+
+```{r}
+routes_network
+```
+
+```{r}
+plot(routes_network, vertex.cex = 3)
+```
+
+```{r}
+plot(routes_network, vertex.cex = 3, mode = "circle")
+```
+
+## Load into iGraph
+
+```{r}
+detach(package:network)
+rm(routes_network)
+library(igraph)
+```
+
+
+```{r}
+routes_igraph <- graph_from_data_frame(d = edges, vertices = nodes, directed = TRUE)
+```
+
+
+```{r}
+plot(routes_igraph, edge.arrow.size = 0.2)
+```
+
+
+```{r}
+plot(routes_igraph, layout = layout_with_graphopt, edge.arrow.size = 0.2)
+```
+
+## With TidyGraph
+
+```{r}
+library(tidygraph)
+library(ggraph)
+```
+
+```{r}
+routes_tidy <- tbl_graph(nodes = nodes, edges = edges, directed = TRUE)
+```
+
+```{r}
+routes_igraph_tidy <- as_tbl_graph(routes_igraph)
+```
+
+```{r}
+routes_tidy %>% 
+  activate(edges) %>% 
+  arrange(desc(weight))
+```
+
+```{r}
+ggraph(routes_igraph, layout = "linear") + 
+  geom_edge_arc(aes(width = weight), alpha = 0.8) + 
+  scale_edge_width(range = c(0.2, 2)) +
+  geom_node_text(aes(label = label))  +
+  theme_graph()
+```
+
+
+```{r}
+library(visNetwork)
+library(networkD3)
+```
+
+```{r}
+nodes_d3 <- mutate(nodes, id = id - 1)
+edges_d3 <- mutate(edges, from = from - 1, to = to - 1)
+```
+
+
+```{r}
+forceNetwork(Links = edges_d3, Nodes = nodes_d3, Source = "from", Target = "to", 
+             NodeID = "label", Group = "id", Value = "weight", 
+             opacity = 1, fontSize = 16, zoom = TRUE)
+```
+
+```{r}
+sankeyNetwork(Links = edges_d3, Nodes = nodes_d3, Source = "from", Target = "to", 
+              NodeID = "label", Value = "weight", fontSize = 16, unit = "Lobbied For")
+```
+
