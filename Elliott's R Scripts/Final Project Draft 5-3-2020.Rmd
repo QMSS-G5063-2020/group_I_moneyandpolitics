@@ -1,0 +1,274 @@
+---
+title: "Final Project"
+author: "Elliott Tran (eat2153)"
+date: "4/25/2020"
+output: html_document
+---
+
+# Load and Wrangle Data
+
+```{r}
+library(tidyverse)
+library(plyr)
+library(extrafont)
+```
+
+
+```{r message=FALSE}
+lob_issue <- read_csv("OpenSecrets_lobby-data/lob_issue.txt", quote ="|,|",
+                      col_names = FALSE)
+lob_issue <- plyr::rename(lob_issue, c('X1' = "SI_ID", "X2" = "Uniqid", 
+                                 "X3" = "IssueID", "X4" = "Issue", 
+                                 "X5" = "SpecificIssue", "X6" = "Year"))
+
+
+lob_lobbying <- read_csv("OpenSecrets_lobby-data/lob_lobbying.txt", quote ="|,|",
+                         col_names = FALSE)
+lob_lobbying <- plyr::rename(lob_lobbying, c('X1' = "Uniqid", "X2" = "Registrant_raw", 
+                                       "X3" = "Registrant", "X4" = "Isfirm", 
+                                       "X5" = "Client_raw", "X6" = "Client", "X7" = "Ultorg", 
+                                       "X8" = "Amount", "X9" = "Catcode", "X10" = "Source", 
+                                       "X11" = "Self", "X12" = "IncludeNSFS", "X13" = "Use", 
+                                       "X14" = "Ind", "X15" = "Year", "X16" = "Type", 
+                                       "X17" = "Typelong", "X18" = "Affiliate"))
+
+
+lob_lobbyist <- read_csv("OpenSecrets_lobby-data/lob_lobbyist.txt", quote ="|,|",
+                         col_names = FALSE)
+lob_lobbyist <- plyr::rename(lob_lobbyist, c('X1' = "Uniqid", "X2" = "Lobbyist_raw", 
+                                       "X3" = "Lobbyist", "X4" = "Lobbyist_id", 
+                                       "X5" = "Year", "X6" = "OfficialPosition", "X7" = "CID", 
+                                       "X8" = "Formercongmem"))
+
+
+
+lob_agency <- read_csv("OpenSecrets_lobby-data/lob_agency.txt", quote ="|,|",
+                       col_names = FALSE)
+
+lob_agency <- plyr::rename(lob_agency, c('X1' = "Uniqid", "X2" = "AgencyID", 
+                                   "X3" = "Agency"))
+```
+
+
+```{r}
+merge_df <- inner_join(lob_lobbying, lob_lobbyist, by = "Uniqid")
+```
+
+```{r}
+merge_df <- inner_join(merge_df, lob_issue, by = "Uniqid")
+```
+
+
+```{r}
+df_2019 <- merge_df %>%
+  filter(Year.x == 2019)  
+```
+
+```{r}
+names2019 <- df_2019 %>%
+  select(Lobbyist_id, Lobbyist, Issue, Registrant, Client, Uniqid) %>%
+  dplyr::distinct(Uniqid, .keep_all = TRUE)
+```
+
+```{r}
+agg2019_lobby <- df_2019 %>%
+  dplyr::select(Uniqid, Amount) 
+
+agg2019_lobby <- aggregate(. ~ Uniqid, data = agg2019_lobby, FUN = sum)
+```
+
+```{r}
+agg2019_lobby <- full_join(names2019, agg2019_lobby, by = "Uniqid") 
+head(agg2019_lobby)
+```
+
+
+## By Lobbyist
+
+```{r}
+agg2019_lobbyist <- agg2019_lobby %>%
+  select(Lobbyist_id, Amount) %>%
+  group_by(Lobbyist_id) %>%
+  summarise_each(funs(if(is.numeric(.)) sum(., na.rm = TRUE) else first(.)))
+
+agg2019_lobbyist <- left_join(agg2019_lobbyist, agg2019_lobby, by = "Lobbyist_id") 
+
+agg2019_lobbyist <- agg2019_lobbyist [ -7]
+```
+
+
+```{r}
+agg2019_lobbyist <- top_n(agg2019_lobbyist, 100, wt = Amount.x)
+```
+
+
+## By Client
+
+```{r}
+agg2019_client <- agg2019_lobby %>%
+  select(Client, Amount) %>%
+  group_by(Client) %>%
+  summarise_each(funs(if(is.numeric(.)) sum(., na.rm = TRUE) else first(.))) %>%
+  top_n(25, wt = Amount)
+
+agg2019_client <- left_join(agg2019_client, agg2019_lobby, by = "Client") 
+
+agg2019_client <- agg2019_client [ -7]
+
+```
+
+
+# Social Network Analysis
+
+```{r}
+library(visNetwork)
+library(networkD3)
+library(htmlwidgets)
+library(curl)
+library(network)
+library(igraph)
+```
+
+## By Lobbyist
+
+Where does the top lobbyists work?
+
+```{r}
+lobby_id <- agg2019_lobbyist %>%
+  distinct(Lobbyist) %>%
+  dplyr::rename(label = Lobbyist)
+```
+
+
+
+```{r}
+registrant <- agg2019_lobbyist %>%
+  distinct(Registrant) %>%
+  dplyr::rename(label = Registrant)
+```
+
+```{r}
+issue <- agg2019_lobbyist %>%
+  distinct(Issue) %>%
+  dplyr::rename(label = Issue)
+```
+
+```{r}
+nodes <- full_join(lobby_id, registrant, by = "label") %>% 
+  rowid_to_column("id")
+nodes
+```
+
+```{r}
+lobby_issue <- agg2019_lobbyist %>%  
+  group_by(Lobbyist, Registrant) %>%
+  dplyr::summarise(weight = n()) %>% 
+  ungroup()
+```
+
+
+```{r}
+edges <- lobby_issue %>% 
+  left_join(nodes, by = c("Lobbyist" = "label")) %>% 
+  dplyr::rename(from = id)
+
+edges <- edges %>% 
+  left_join(nodes, by = c("Registrant" = "label")) %>% 
+  dplyr::rename(to = id)
+
+edges <- select(edges, from, to, weight)
+
+```
+
+
+```{r}
+nodes_d3 <- mutate(nodes, id = id - 1)
+edges_d3 <- mutate(edges, from = from - 1, to = to - 1)
+```
+
+
+```{r}
+network <- sankeyNetwork(Links = edges_d3, Nodes = nodes_d3, Source = "from", Target = "to", 
+              NodeID = "label", Value = "weight", unit = "Lobbied For", fontSize=16,
+              width=1500, height=1500,
+              margin = list("left"=100))
+
+network
+
+```
+
+
+## By client
+
+```{r}
+lobby_id2 <- agg2019_client %>%
+  distinct(Client) %>%
+  dplyr::rename(label = Client)
+```
+
+```{r}
+issue2 <- agg2019_client %>%
+  distinct(Issue) %>%
+  dplyr::rename(label = Issue)
+```
+
+```{r}
+nodes2 <- full_join(lobby_id2, issue2, by = "label") %>% 
+  rowid_to_column("id")
+nodes2
+```
+
+```{r}
+lobby_issue2 <- agg2019_client %>%  
+  group_by(Client, Issue) %>%
+  dplyr::summarise(weight = n()) %>% 
+  ungroup()
+```
+
+
+```{r}
+edges2 <- lobby_issue2 %>% 
+  left_join(nodes2, by = c("Client" = "label")) %>% 
+  dplyr::rename(from = id)
+
+edges2 <- edges2 %>% 
+  left_join(nodes2, by = c("Issue" = "label")) %>% 
+  dplyr::rename(to = id)
+
+edges2 <- select(edges2, from, to, weight)
+```
+
+```{r}
+routes_network2 <- network(edges2, vertex.attr = nodes2, matrix.type = "edgelist", ignore.eval = FALSE)
+```
+
+```{r}
+nodes_d3_2 <- mutate(nodes2, id = id - 1)
+edges_d3_2 <- mutate(edges2, from = from - 1, to = to - 1)
+```
+
+```{r}
+forceNetwork(Links = edges_d3_2, Nodes = nodes_d3_2, Source = "from", Target = "to", 
+             NodeID = "label", Group = "id", Value = "weight", 
+             opacity = 1, fontSize = 16, zoom = TRUE)
+```
+
+
+
+```{r}
+network2 <- sankeyNetwork(Links = edges_d3_2, Nodes = nodes_d3_2, Source = "from", Target = "to", 
+              NodeID = "label", Value = "weight", unit = "Lobbied For", iterations = 100,
+              fontSize=16,
+              width=1000, height=1000,
+              margin = list("left"=100))
+
+network2
+```
+
+
+## By D3
+
+
+
+
+
