@@ -1,0 +1,702 @@
+---
+title: "Sentiment_Analysis_Lobbying"
+author: "Sayali Nagwekar"
+date: "04/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(devtools)
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(tidyverse)
+library(SnowballC)
+library(tm)
+library(wordcloud)
+library(lsa)
+library(ggplot2)
+library(igraph)
+```
+
+```{r}
+# Data Cleaning
+lobby1 <- tibble(file = paste0(c("lob_agency.txt"))) %>%
+        mutate(text = map(file, read_lines)) %>%
+        unnest() %>%
+        group_by(file = str_sub(basename(file), 1, -5)) %>% 
+        mutate(line_number = row_number()) %>%
+        ungroup() %>%
+        unnest_tokens(word, text) %>% 
+        anti_join(stop_words) %>% ## remove stop words 
+        mutate(word = wordStem(word)) ## stemming the words
+```
+
+```{r}
+# Data Cleaning
+lobby2 <- tibble(file = paste0(c("lob_indus.txt"))) %>%
+        mutate(text = map(file, read_lines)) %>%
+        unnest() %>%
+        group_by(file = str_sub(basename(file), 1, -5)) %>% 
+        mutate(line_number = row_number()) %>%
+        ungroup() %>%
+        unnest_tokens(word, text) %>% 
+        anti_join(stop_words) %>% ## remove stop words 
+        mutate(word = wordStem(word)) ## stemming the words
+```
+
+```{r}
+# Data Cleaning
+lobby3 <- tibble(file = paste0(c("lob_issue.txt"))) %>%
+        mutate(text = map(file, read_lines)) %>%
+        unnest() %>%
+        group_by(file = str_sub(basename(file), 1, -5)) %>% 
+        mutate(line_number = row_number()) %>%
+        ungroup() %>%
+        unnest_tokens(word, text) %>% 
+        anti_join(stop_words) %>% ## remove stop words 
+        mutate(word = wordStem(word)) ## stemming the words
+```
+
+```{r}
+# Data Cleaning
+lobby4 <- tibble(file = paste0(c("lob_lobbying.txt"))) %>%
+        mutate(text = map(file, read_lines)) %>%
+        unnest() %>%
+        group_by(file = str_sub(basename(file), 1, -5)) %>% 
+        mutate(line_number = row_number()) %>%
+        ungroup() %>%
+        unnest_tokens(word, text) %>% 
+        anti_join(stop_words) %>% ## remove stop words 
+        mutate(word = wordStem(word)) ## stemming the words
+```
+
+```{r}
+# Bing sentiment analysis
+lobby1_sentiment <- lobby1 %>%
+        inner_join(get_sentiments("bing")) %>%
+        count(word, sentiment, sort = TRUE) %>%
+        ungroup()
+
+lobby1_sentiment
+```
+
+```{r}
+lobby1_sentiment %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# NRC Sentiment Analysis - Fear
+nrc_fear <- get_sentiments("nrc") %>% 
+        filter(sentiment == "fear")
+
+sent1_fear <- lobby1 %>%
+        inner_join(nrc_fear) %>%
+        count(word, sort = TRUE)
+sent1_fear
+```
+
+
+```{r}
+sent1_fear %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Anger
+nrc_anger <- get_sentiments("nrc") %>% 
+        filter(sentiment == "anger")
+
+sent1_anger <- lobby1 %>%
+        inner_join(nrc_anger) %>%
+        count(word, sort = TRUE)
+sent1_anger
+```
+
+```{r}
+sent1_anger %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Disgust
+nrc_disgust <- get_sentiments("nrc") %>% 
+        filter(sentiment == "disgust")
+
+sent1_disgust <- lobby1 %>%
+        inner_join(nrc_disgust) %>%
+        count(word, sort = TRUE)
+sent1_disgust
+```
+
+```{r}
+sent1_disgust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Trust
+nrc_trust <-get_sentiments("nrc") %>% 
+        filter(sentiment == "trust")
+
+sent1_trust <- lobby1 %>%
+        inner_join(nrc_trust) %>%
+        count(word, sort = TRUE)
+sent1_trust
+```
+
+
+```{r}
+sent1_trust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Joy
+nrc_joy <- get_sentiments("nrc") %>% 
+        filter(sentiment == "joy")
+
+sent1_joy <- lobby1 %>%
+        inner_join(nrc_joy) %>%
+        count(word, sort = TRUE)
+sent1_joy
+```
+
+
+```{r}
+sent1_joy %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# Bing sentiment analysis
+lobby2_sentiment <- lobby2 %>%
+        inner_join(get_sentiments("bing")) %>%
+        count(word, sentiment, sort = TRUE) %>%
+        ungroup()
+
+lobby2_sentiment
+```
+
+```{r}
+lobby2_sentiment %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# NRC Sentiment Analysis - Fear
+nrc_fear <- get_sentiments("nrc") %>% 
+        filter(sentiment == "fear")
+
+sent2_fear <- lobby2 %>%
+        inner_join(nrc_fear) %>%
+        count(word, sort = TRUE)
+sent2_fear
+```
+
+
+```{r}
+sent2_fear %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Anger
+nrc_anger <- get_sentiments("nrc") %>% 
+        filter(sentiment == "anger")
+
+sent2_anger <- lobby2 %>%
+        inner_join(nrc_anger) %>%
+        count(word, sort = TRUE)
+sent2_anger
+```
+
+```{r}
+sent2_anger %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Disgust
+nrc_disgust <- get_sentiments("nrc") %>% 
+        filter(sentiment == "disgust")
+
+sent2_disgust <- lobby2 %>%
+        inner_join(nrc_disgust) %>%
+        count(word, sort = TRUE)
+sent2_disgust
+```
+
+```{r}
+sent2_disgust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Trust
+nrc_trust <-get_sentiments("nrc") %>% 
+        filter(sentiment == "trust")
+
+sent2_trust <- lobby2 %>%
+        inner_join(nrc_trust) %>%
+        count(word, sort = TRUE)
+sent2_trust
+```
+
+
+```{r}
+sent2_trust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Joy
+nrc_joy <- get_sentiments("nrc") %>% 
+        filter(sentiment == "joy")
+
+sent2_joy <- lobby2 %>%
+        inner_join(nrc_joy) %>%
+        count(word, sort = TRUE)
+sent2_joy
+```
+
+
+```{r}
+sent2_joy %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# Bing sentiment analysis
+lobby3_sentiment <- lobby3 %>%
+        inner_join(get_sentiments("bing")) %>%
+        count(word, sentiment, sort = TRUE) %>%
+        ungroup()
+
+lobby3_sentiment
+```
+
+```{r}
+lobby3_sentiment %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# NRC Sentiment Analysis - Fear
+nrc_fear <- get_sentiments("nrc") %>% 
+        filter(sentiment == "fear")
+
+sent3_fear <- lobby3 %>%
+        inner_join(nrc_fear) %>%
+        count(word, sort = TRUE)
+sent3_fear
+```
+
+
+```{r}
+sent3_fear %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Anger
+nrc_anger <- get_sentiments("nrc") %>% 
+        filter(sentiment == "anger")
+
+sent3_anger <- lobby3 %>%
+        inner_join(nrc_anger) %>%
+        count(word, sort = TRUE)
+sent3_anger
+```
+
+```{r}
+sent3_anger %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Disgust
+nrc_disgust <- get_sentiments("nrc") %>% 
+        filter(sentiment == "disgust")
+
+sent3_disgust <- lobby3 %>%
+        inner_join(nrc_disgust) %>%
+        count(word, sort = TRUE)
+sent3_disgust
+```
+
+```{r}
+sent3_disgust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Trust
+nrc_trust <-get_sentiments("nrc") %>% 
+        filter(sentiment == "trust")
+
+sent3_trust <- lobby3 %>%
+        inner_join(nrc_trust) %>%
+        count(word, sort = TRUE)
+sent3_trust
+```
+
+
+```{r}
+sent3_trust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Joy
+nrc_joy <- get_sentiments("nrc") %>% 
+        filter(sentiment == "joy")
+
+sent3_joy <- lobby3 %>%
+        inner_join(nrc_joy) %>%
+        count(word, sort = TRUE)
+sent3_joy
+```
+
+
+```{r}
+sent3_joy %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# Bing sentiment analysis
+lobby4_sentiment <- lobby4 %>%
+        inner_join(get_sentiments("bing")) %>%
+        count(word, sentiment, sort = TRUE) %>%
+        ungroup()
+
+lobby4_sentiment
+```
+
+```{r}
+lobby4_sentiment %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# NRC Sentiment Analysis - Fear
+nrc_fear <- get_sentiments("nrc") %>% 
+        filter(sentiment == "fear")
+
+sent4_fear <- lobby4 %>%
+        inner_join(nrc_fear) %>%
+        count(word, sort = TRUE)
+sent4_fear
+```
+
+
+```{r}
+sent4_fear %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Anger
+nrc_anger <- get_sentiments("nrc") %>% 
+        filter(sentiment == "anger")
+
+sent4_anger <- lobby4 %>%
+        inner_join(nrc_anger) %>%
+        count(word, sort = TRUE)
+sent4_anger
+```
+
+```{r}
+sent4_anger %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Disgust
+nrc_disgust <- get_sentiments("nrc") %>% 
+        filter(sentiment == "disgust")
+
+sent4_disgust <- lobby4 %>%
+        inner_join(nrc_disgust) %>%
+        count(word, sort = TRUE)
+sent4_disgust
+```
+
+```{r}
+sent4_disgust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Trust
+nrc_trust <-get_sentiments("nrc") %>% 
+        filter(sentiment == "trust")
+
+sent4_trust <- lobby4 %>%
+        inner_join(nrc_trust) %>%
+        count(word, sort = TRUE)
+sent4_trust
+```
+
+
+```{r}
+sent4_trust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Joy
+nrc_joy <- get_sentiments("nrc") %>% 
+        filter(sentiment == "joy")
+
+sent4_joy <- lobby4 %>%
+        inner_join(nrc_joy) %>%
+        count(word, sort = TRUE)
+sent4_joy
+```
+
+
+```{r}
+sent4_joy %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
