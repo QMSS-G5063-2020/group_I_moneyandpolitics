@@ -1,0 +1,1354 @@
+---
+title: "Data Viz - Group I Money in Politics Final Project"
+output: rmarkdown::html_vignette
+---
+
+**Group I: Money in Politics**
+-------------------------------------------
+
+*Julia Tache, Elliott Tran, Olivia Shin, Sayali Nagwekar*
+
+*Professor Thomas Brambor*
+
+*GR5063: Data Visualization*
+
+*May 4th, 2020*
+
+We are interested in exploring lobbying reports submitted in compliance with the U.S. Lobbying Disclosure Act of 1995 (LDA) to find insights on how money influences the political process. Utilizing 7 datasets regarding LDA from Open Secrets, we will explore the unique structures and relationships of lobbying in politics. We decided to examine lobbying efforts, key players, and the effects lobbying has on legislation and compare state sponsors and issues between 2018-2019 and the election year of 2015-2016. 
+
+## Visualizations {.tabset}
+
+### Text Analysis (Sayali)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(devtools)
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(tidyverse)
+library(SnowballC)
+library(tm)
+library(wordcloud)
+library(lsa)
+library(ggplot2)
+library(igraph)
+```
+
+```{r}
+# Data Cleaning
+lobby1 <- tibble(file = paste0(c("lob_agency.txt"))) %>%
+        mutate(text = map(file, read_lines)) %>%
+        unnest() %>%
+        group_by(file = str_sub(basename(file), 1, -5)) %>% 
+        mutate(line_number = row_number()) %>%
+        ungroup() %>%
+        unnest_tokens(word, text) %>% 
+        anti_join(stop_words) %>% ## remove stop words 
+        mutate(word = wordStem(word)) ## stemming the words
+```
+
+```{r}
+# Data Cleaning
+lobby2 <- tibble(file = paste0(c("lob_indus.txt"))) %>%
+        mutate(text = map(file, read_lines)) %>%
+        unnest() %>%
+        group_by(file = str_sub(basename(file), 1, -5)) %>% 
+        mutate(line_number = row_number()) %>%
+        ungroup() %>%
+        unnest_tokens(word, text) %>% 
+        anti_join(stop_words) %>% ## remove stop words 
+        mutate(word = wordStem(word)) ## stemming the words
+```
+
+```{r}
+# Data Cleaning
+lobby3 <- tibble(file = paste0(c("lob_issue.txt"))) %>%
+        mutate(text = map(file, read_lines)) %>%
+        unnest() %>%
+        group_by(file = str_sub(basename(file), 1, -5)) %>% 
+        mutate(line_number = row_number()) %>%
+        ungroup() %>%
+        unnest_tokens(word, text) %>% 
+        anti_join(stop_words) %>% ## remove stop words 
+        mutate(word = wordStem(word)) ## stemming the words
+```
+
+```{r}
+# Data Cleaning
+lobby4 <- tibble(file = paste0(c("lob_lobbying.txt"))) %>%
+        mutate(text = map(file, read_lines)) %>%
+        unnest() %>%
+        group_by(file = str_sub(basename(file), 1, -5)) %>% 
+        mutate(line_number = row_number()) %>%
+        ungroup() %>%
+        unnest_tokens(word, text) %>% 
+        anti_join(stop_words) %>% ## remove stop words 
+        mutate(word = wordStem(word)) ## stemming the words
+```
+
+```{r}
+# Bing sentiment analysis
+lobby1_sentiment <- lobby1 %>%
+        inner_join(get_sentiments("bing")) %>%
+        count(word, sentiment, sort = TRUE) %>%
+        ungroup()
+
+lobby1_sentiment
+```
+
+```{r}
+lobby1_sentiment %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# NRC Sentiment Analysis - Fear
+nrc_fear <- get_sentiments("nrc") %>% 
+        filter(sentiment == "fear")
+
+sent1_fear <- lobby1 %>%
+        inner_join(nrc_fear) %>%
+        count(word, sort = TRUE)
+sent1_fear
+```
+
+
+```{r}
+sent1_fear %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Anger
+nrc_anger <- get_sentiments("nrc") %>% 
+        filter(sentiment == "anger")
+
+sent1_anger <- lobby1 %>%
+        inner_join(nrc_anger) %>%
+        count(word, sort = TRUE)
+sent1_anger
+```
+
+```{r}
+sent1_anger %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Disgust
+nrc_disgust <- get_sentiments("nrc") %>% 
+        filter(sentiment == "disgust")
+
+sent1_disgust <- lobby1 %>%
+        inner_join(nrc_disgust) %>%
+        count(word, sort = TRUE)
+sent1_disgust
+```
+
+```{r}
+sent1_disgust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Trust
+nrc_trust <-get_sentiments("nrc") %>% 
+        filter(sentiment == "trust")
+
+sent1_trust <- lobby1 %>%
+        inner_join(nrc_trust) %>%
+        count(word, sort = TRUE)
+sent1_trust
+```
+
+
+```{r}
+sent1_trust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Joy
+nrc_joy <- get_sentiments("nrc") %>% 
+        filter(sentiment == "joy")
+
+sent1_joy <- lobby1 %>%
+        inner_join(nrc_joy) %>%
+        count(word, sort = TRUE)
+sent1_joy
+```
+
+
+```{r}
+sent1_joy %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# Bing sentiment analysis
+lobby2_sentiment <- lobby2 %>%
+        inner_join(get_sentiments("bing")) %>%
+        count(word, sentiment, sort = TRUE) %>%
+        ungroup()
+
+lobby2_sentiment
+```
+
+```{r}
+lobby2_sentiment %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# NRC Sentiment Analysis - Fear
+nrc_fear <- get_sentiments("nrc") %>% 
+        filter(sentiment == "fear")
+
+sent2_fear <- lobby2 %>%
+        inner_join(nrc_fear) %>%
+        count(word, sort = TRUE)
+sent2_fear
+```
+
+
+```{r}
+sent2_fear %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Anger
+nrc_anger <- get_sentiments("nrc") %>% 
+        filter(sentiment == "anger")
+
+sent2_anger <- lobby2 %>%
+        inner_join(nrc_anger) %>%
+        count(word, sort = TRUE)
+sent2_anger
+```
+
+```{r}
+sent2_anger %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Disgust
+nrc_disgust <- get_sentiments("nrc") %>% 
+        filter(sentiment == "disgust")
+
+sent2_disgust <- lobby2 %>%
+        inner_join(nrc_disgust) %>%
+        count(word, sort = TRUE)
+sent2_disgust
+```
+
+```{r}
+sent2_disgust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Trust
+nrc_trust <-get_sentiments("nrc") %>% 
+        filter(sentiment == "trust")
+
+sent2_trust <- lobby2 %>%
+        inner_join(nrc_trust) %>%
+        count(word, sort = TRUE)
+sent2_trust
+```
+
+
+```{r}
+sent2_trust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Joy
+nrc_joy <- get_sentiments("nrc") %>% 
+        filter(sentiment == "joy")
+
+sent2_joy <- lobby2 %>%
+        inner_join(nrc_joy) %>%
+        count(word, sort = TRUE)
+sent2_joy
+```
+
+
+```{r}
+sent2_joy %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# Bing sentiment analysis
+lobby3_sentiment <- lobby3 %>%
+        inner_join(get_sentiments("bing")) %>%
+        count(word, sentiment, sort = TRUE) %>%
+        ungroup()
+
+lobby3_sentiment
+```
+
+```{r}
+lobby3_sentiment %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# NRC Sentiment Analysis - Fear
+nrc_fear <- get_sentiments("nrc") %>% 
+        filter(sentiment == "fear")
+
+sent3_fear <- lobby3 %>%
+        inner_join(nrc_fear) %>%
+        count(word, sort = TRUE)
+sent3_fear
+```
+
+
+```{r}
+sent3_fear %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Anger
+nrc_anger <- get_sentiments("nrc") %>% 
+        filter(sentiment == "anger")
+
+sent3_anger <- lobby3 %>%
+        inner_join(nrc_anger) %>%
+        count(word, sort = TRUE)
+sent3_anger
+```
+
+```{r}
+sent3_anger %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Disgust
+nrc_disgust <- get_sentiments("nrc") %>% 
+        filter(sentiment == "disgust")
+
+sent3_disgust <- lobby3 %>%
+        inner_join(nrc_disgust) %>%
+        count(word, sort = TRUE)
+sent3_disgust
+```
+
+```{r}
+sent3_disgust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Trust
+nrc_trust <-get_sentiments("nrc") %>% 
+        filter(sentiment == "trust")
+
+sent3_trust <- lobby3 %>%
+        inner_join(nrc_trust) %>%
+        count(word, sort = TRUE)
+sent3_trust
+```
+
+
+```{r}
+sent3_trust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Joy
+nrc_joy <- get_sentiments("nrc") %>% 
+        filter(sentiment == "joy")
+
+sent3_joy <- lobby3 %>%
+        inner_join(nrc_joy) %>%
+        count(word, sort = TRUE)
+sent3_joy
+```
+
+
+```{r}
+sent3_joy %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# Bing sentiment analysis
+lobby4_sentiment <- lobby4 %>%
+        inner_join(get_sentiments("bing")) %>%
+        count(word, sentiment, sort = TRUE) %>%
+        ungroup()
+
+lobby4_sentiment
+```
+
+```{r}
+lobby4_sentiment %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+```{r}
+# NRC Sentiment Analysis - Fear
+nrc_fear <- get_sentiments("nrc") %>% 
+        filter(sentiment == "fear")
+
+sent4_fear <- lobby4 %>%
+        inner_join(nrc_fear) %>%
+        count(word, sort = TRUE)
+sent4_fear
+```
+
+
+```{r}
+sent4_fear %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Anger
+nrc_anger <- get_sentiments("nrc") %>% 
+        filter(sentiment == "anger")
+
+sent4_anger <- lobby4 %>%
+        inner_join(nrc_anger) %>%
+        count(word, sort = TRUE)
+sent4_anger
+```
+
+```{r}
+sent4_anger %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Disgust
+nrc_disgust <- get_sentiments("nrc") %>% 
+        filter(sentiment == "disgust")
+
+sent4_disgust <- lobby4 %>%
+        inner_join(nrc_disgust) %>%
+        count(word, sort = TRUE)
+sent4_disgust
+```
+
+```{r}
+sent4_disgust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Trust
+nrc_trust <-get_sentiments("nrc") %>% 
+        filter(sentiment == "trust")
+
+sent4_trust <- lobby4 %>%
+        inner_join(nrc_trust) %>%
+        count(word, sort = TRUE)
+sent4_trust
+```
+
+
+```{r}
+sent4_trust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+```{r}
+# NRC Sentiment Analysis - Joy
+nrc_joy <- get_sentiments("nrc") %>% 
+        filter(sentiment == "joy")
+
+sent4_joy <- lobby4 %>%
+        inner_join(nrc_joy) %>%
+        count(word, sort = TRUE)
+sent4_joy
+```
+
+
+```{r}
+sent4_joy %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL) +
+        coord_flip()
+```
+
+
+### Maps and Spatial Analysis (Julia)
+
+**Mapping out Number of Bills Sponsored by State - 2018-2019**
+
+First, we will look at legislation data from the House of Represenatives from the 115th and 116th sessions of congress. The data on legislation and the states that sponsored each bill was found on congress.gov. We will be looking at a sample of 1000 bills from 2018-2019 (due to the nature of the accessibility of data from this website, only 1000 bills at a time could be downloaded, so these are not a random sample and should not be viewed as representative). 
+
+```{r}
+library(tidyverse) 
+
+lob_issue <- read_csv("lob_issue.txt", quote ="|,|",
+                      col_names = FALSE)
+lob_issue <- rename(lob_issue, c("SI_ID" = "X1", "Uniqid" = "X2", 
+                                 "IssueID" = "X3", "Issue" = "X4", 
+                                 "SpecificIssue" = "X5", "Year" = "X6"))
+
+lob_bills <- read_csv("lob_bills.txt", quote ="|,|",
+                      col_names = FALSE)
+lob_bills <- rename(lob_bills, c("B_ID" = "X1", "SI_ID" = "X2", 
+                                 "CongNo" = "X3", "Bill_Name" = "X4"))
+
+lob_bills$SI_ID <- as.character(lob_bills$SI_ID)
+
+bills_issues <- left_join(lob_bills, lob_issue) %>% 
+  distinct(Bill_Name, .keep_all = TRUE) 
+
+bills_115 <- read_csv("115 Bills.csv")
+bills_116 <- read_csv("116 Bills.csv")
+
+bills_full_18_19 <- rbind(bills_115, bills_116)
+bills_full_18_19 <- sample_n(bills_full_18_19, 1000)
+
+bills_full_18_19$Sponsor <- as.character(str_extract_all(bills_full_18_19$Sponsor, "[A-Z]{2}"))
+bills_full_18_19$Sponsor <- as.character(str_extract_all(bills_full_18_19$Sponsor, "[A-Z]{2}")) 
+
+bills_full_18_19 <- bills_full_18_19 %>% rename("Bill_Name" = "Legislation Number")
+
+bills_full_18_19$Bill_Name <- str_replace_all(bills_full_18_19$Bill_Name, "\\s+", "")
+
+lob_bills_full_18_19 <- inner_join(bills_full_18_19, bills_issues) %>% 
+  distinct(Bill_Name, .keep_all = TRUE)
+
+```
+
+
+```{r}
+library(leaflet)
+library(maps)
+library(tigris) 
+library(ggmap)
+library(tidyr)
+library(repurrrsive)
+library(viridis)
+
+lob_states_18_19 <- lob_bills_full_18_19 %>% group_by(Sponsor) %>%
+  summarize(`Number of Bills/State` = n())
+
+states <- states(cb = FALSE)
+
+states_merged_18_19 <- geo_join(states, lob_states_18_19, "STUSPS", "Sponsor") 
+states_merged_18_19 <- na.omit(states_merged_18_19)
+
+pal <- colorNumeric("plasma", domain = states_merged_18_19$Number.of.Bills.State)
+
+labels <- sprintf("<strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_18_19$NAME, states_merged_18_19$Number.of.Bills.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+leaflet(states_merged_18_19) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_18_19$Number.of.Bills.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of State-Sponsered Bills 2018-2019", 
+            pal = pal, 
+            values = states_merged_18_19$`Number.of.Bills.State`, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix) 
+
+```
+
+It looks like the number of bills per state introduced through or supported by lobbying varies greatly, with larger states generally sponsoring more bills. 
+
+**Mapping out Number of Bills Sponsored by State - 2016-2017**
+
+Now, we will look at legislation data from the House of Represenatives from the 114th session of congress, during the Presidential election year (2015-2016). Once again, the sample of bills is n = 1000. 
+
+```{r}
+
+bills_114 <- read_csv("114 Bills.csv")
+
+bills_114$Sponsor <- as.character(str_extract_all(bills_114$Sponsor, "[A-Z]{2}"))
+bills_114$Sponsor <- as.character(str_extract_all(bills_114$Sponsor, "[A-Z]{2}")) 
+
+bills_114 <- bills_114 %>% rename("Bill_Name" = "Legislation Number")
+
+bills_114$Bill_Name <- str_replace_all(bills_114$Bill_Name, "\\s+", "")
+
+lob_bills_full_15_16 <- inner_join(bills_114, bills_issues) %>% 
+  distinct(Bill_Name, .keep_all = TRUE)
+
+lob_states_15_16 <- lob_bills_full_15_16 %>% group_by(Sponsor) %>%
+  summarize(`Number of Bills/State` = n()) 
+
+states_merged_15_16 <- geo_join(states, lob_states_15_16, "STUSPS", "Sponsor") 
+states_merged_15_16 <- na.omit(states_merged_15_16)
+
+pal <- colorNumeric("plasma", domain = states_merged_15_16$Number.of.Bills.State)
+
+labels <- sprintf("<strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_15_16$NAME, states_merged_15_16$Number.of.Bills.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+leaflet(states_merged_15_16) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_15_16$Number.of.Bills.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of State-Sponsered Bills 2015-2016", 
+            pal = pal, 
+            values = states_merged_15_16$`Number.of.Bills.State`, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix) 
+
+```
+
+It looks like there are generally more bills sponsored through lobbying during the election year possibly because the passage of new laws in favor of a certain constituency would lead voters to support politicians passing these laws. Given the unique nature of the 2016 election, new bills may have been proposed which would have attempted to make President Donald Trump easier or harder to elect, to limit his powers, etc. Let's look at how the issues that each bill addresses differ through each state.  
+
+**Mapping out Issues per State - 2018-2019**
+
+```{r}
+lob_issues_18_19 <- lob_bills_full_18_19 %>% 
+  group_by(Sponsor, Issue) %>%
+  summarize(`Number of Issues/State` = n()) %>%
+  group_by(Sponsor) %>%
+  arrange(`Number of Issues/State`) %>%  
+  filter(`Number of Issues/State` %in% range(`Number of Issues/State`)) %>% 
+  group_by(Sponsor) %>%
+  arrange(`Number of Issues/State`) %>%
+  # in case of ties
+  slice(if (length(`Number of Issues/State`) == 50) 50 else c(50, n())) 
+
+states_merged_18_19 <- geo_join(states, lob_issues_18_19, "STUSPS", "Sponsor") 
+states_merged_18_19 <- na.omit(states_merged_18_19)
+
+pal <- colorNumeric("plasma", domain = states_merged_18_19$Number.of.Issues.State)
+
+labels <- sprintf("<strong>%s</strong><br/><strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_18_19$NAME,
+                  states_merged_18_19$Issue, states_merged_18_19$Number.of.Issues.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+leaflet(states_merged_18_19) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_18_19$Number.of.Issues.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of Issues/State 2018-2019", 
+            pal = pal, 
+            values = states_merged_18_19$`Number.of.Issues.State`, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix) 
+
+
+```
+Taxes appear to be the most common area that bills cover. 
+
+**Mapping out Issues per State - 2016-2017**
+
+```{r}
+
+lob_issues_15_16 <- lob_bills_full_15_16 %>% 
+  group_by(Sponsor, Issue) %>%
+  summarize(`Number of Issues/State` = n()) %>%
+  group_by(Sponsor) %>%
+  arrange(`Number of Issues/State`) %>%  
+  filter(`Number of Issues/State` %in% range(`Number of Issues/State`)) %>% 
+  group_by(Sponsor) %>%
+  arrange(`Number of Issues/State`) %>%
+  slice(if (length(`Number of Issues/State`) == 50) 50 else c(50, n()))
+
+states_merged_15_16 <- geo_join(states, lob_issues_15_16, "STUSPS", "Sponsor") 
+states_merged_15_16 <- na.omit(states_merged_15_16)
+
+pal <- colorNumeric("plasma", domain = states_merged_15_16$Number.of.Issues.State)
+
+labels <- sprintf("<strong>%s</strong><br/><strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_15_16$NAME,
+                  states_merged_15_16$Issue, states_merged_15_16$Number.of.Issues.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+leaflet(states_merged_15_16) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_15_16$Number.of.Issues.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of Issues/State 2018-2019", 
+            pal = pal, 
+            values = states_merged_15_16$`Number.of.Issues.State`, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix) 
+
+```
+
+Taxes were still highly represented, but there was a bit more variety during the election year. In California, the most bills passed were for Energy & Nuclear Power and in Texas, most bills passed were for Health Issues.
+
+**Mapping out Congressmen-turned-Lobbyists by State** 
+
+Now let's look at how many former congressmen became lobbyists and which states they came from. 
+
+```{r}
+lob_lobbyist <- read_csv("lob_lobbyist.txt", quote ="|,|",
+                         col_names = FALSE)
+lob_lobbyist <- rename(lob_lobbyist, c("Uniqid" = "X1", "Lobbyist_raw" = "X2", 
+                                       "Lobbyist" = "X3", "Lobbyist_id" = "X4", 
+                                       "Year" = "X5", "OfficialPosition" = "X6", "CID" = "X7", 
+                                       "Formercongmem" = "X8"))
+
+congressmen <- read_csv("legislators-historical.csv")
+
+congressmen$name <- paste(congressmen$last_name, congressmen$first_name, sep = ", ")
+
+former_congressmen <- lob_lobbyist %>% filter(Formercongmem == "y")
+
+former_congressmen <- former_congressmen %>%
+  rename("name" = "Lobbyist")
+
+full_congressmen <- left_join(former_congressmen, congressmen)
+
+number_congressmen <- full_congressmen %>% group_by(state) %>%
+  summarize(`Number of Congressmen/State` = n())
+
+states_merged_congressmen <- geo_join(states, number_congressmen, "STUSPS", "state") 
+states_merged_congressmen <- na.omit(states_merged_congressmen)
+
+pal <- colorNumeric("plasma", domain = states_merged_congressmen$Number.of.Congressmen.State)
+
+labels <- sprintf("<strong>%s</strong><br/>%g Former Congressmen now Lobbyists",
+                  states_merged_congressmen$NAME,
+                  states_merged_congressmen$Number.of.Congressmen.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+leaflet(states_merged_congressmen) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_congressmen$Number.of.Congressmen.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of Congressmen/State", 
+            pal = pal, 
+            values = states_merged_congressmen$Number.of.Congressmen.State, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix) 
+
+```
+
+As the saying goes, everything's bigger in Texas- over 3,000 lobbyists in the dataset once served in congress there. Let's see who these congressmen are, what kind of agencies they lobbied to, and who their clients are.
+
+**Lobbyists and Lobbying Agencies in Texas**
+
+```{r}
+library(plotly)
+library(ggthemes)
+
+lob_agency <- read_csv("lob_agency.txt", quote ="|,|",
+                       col_names = FALSE)
+lob_agency <- plyr::rename(lob_agency, c('X1' = "Uniqid", "X2" = "AgencyID", 
+                                   "X3" = "Agency"))
+
+tx_congressmen <- full_congressmen %>% filter(state == "TX")
+
+tx_congressmen_full <- left_join(tx_congressmen, lob_agency) 
+
+tx_agency_count <- tx_congressmen_full %>% 
+  group_by(Agency) %>%
+  dplyr::summarize(n = n()) %>%
+  filter(n > 100) 
+
+ggplot(tx_agency_count, aes(x = "", y = n, fill = Agency)) +
+geom_bar(width = 1, stat = "identity") + coord_polar("y", start=0) + 
+  scale_fill_viridis(option = "plasma", discrete = TRUE)
+
+tx_agency_count <- tx_congressmen_full %>%
+  group_by(party) %>%
+  dplyr::mutate(`Party Members` = n()) %>%
+  group_by(Agency) %>%
+  dplyr::mutate(`Number of Agencies` = n()) %>%
+  filter(`Number of Agencies` > 100)
+
+# tx_congressmen_full %>%
+#   group_by(name, party) %>%
+#   dplyr::summarize(`Party Members` = n())
+# get a sense of who is a Republican and who is a Democrat 
+
+barplot_agency <- ggplot(tx_agency_count, aes(x = party, y = "", fill = Agency)) +
+geom_bar(width = 1, stat = "identity") + 
+  scale_fill_viridis(option = "plasma", discrete = TRUE) +
+  theme_tufte() + 
+  theme(axis.text.x=element_text(angle=45,size = rel(0.75), 
+                                 margin = margin(1, unit = "cm"), vjust = 1)) +
+  xlab("Party") + ylab("")
+
+ggplotly(barplot_agency)
+
+barplot_congressmen <- ggplot(tx_agency_count, aes(x = name, y = "", fill = Agency)) +
+geom_bar(width = 1, stat = "identity") + 
+  scale_fill_viridis(option = "plasma", discrete = TRUE) +
+  theme_tufte() + 
+  theme(axis.text.x=element_text(angle=45,size = rel(0.75), 
+                                 margin = margin(1, unit = "cm"), vjust = 1)) +
+  xlab("Congressmen") + ylab("")
+
+ggplotly(barplot_congressmen)
+
+lob_lobbying <- read_csv("lob_lobbying.txt", quote ="|,|",
+                         col_names = FALSE)
+lob_lobbying <- plyr::rename(lob_lobbying, c('X1' = "Uniqid", "X2" = "Registrant_raw", 
+                                        "X3" = "Registrant", "X4" = "Isfirm", 
+                                        "X5" = "Client_raw", "X6" = "Client", "X7" = "Ultorg", 
+                                        "X8" = "Amount", "X9" = "Catcode", "X10" = "Source", 
+                                        "X11" = "Self", "X12" = "IncludeNSFS", "X13" = "Use", 
+                                        "X14" = "Ind", "X15" = "Year", "X16" = "Type", 
+                                        "X17" = "Typelong", "X18" = "Affiliate"))
+
+tx_congressmen_clients <- left_join(tx_congressmen, lob_lobbying) 
+
+tx_client_count <- tx_congressmen_clients %>% 
+  group_by(Client) %>%
+  dplyr::mutate(n = n()) %>%
+  filter(n > 45) # top 6 largest clients
+
+ggplot(tx_client_count, aes(x = "", y = n, fill = Client)) +
+geom_bar(width = 1, stat = "identity") + coord_polar("y", start=0) + 
+  scale_fill_viridis(option = "plasma", discrete = TRUE)
+
+```
+
+Most Texan former congressmen now lobbyists lobby to congress, with a sizable chunk lobbying to various departments such as Defense, Agriculture, and Education. This suggests a "revolving door" of congressmen entering politics as elected officials and eventually influencing legislation through money. Interestingly enough, most Texan congressmen are Democrats; they likely lobby in favor of progressive policies within a red state. Looking at clients, the top 6 seem to have similar numbers of bills on behalf of their interests, with all of the companies relating to agriculture. 
+
+### Social Network Analysis (Elliott)
+
+**Load and Wrangle Data**
+
+```{r}
+library(tidyverse)
+library(plyr)
+library(extrafont)
+```
+
+```{r message=FALSE}
+# lob_issue <- read_csv("lob_issue.txt", quote ="|,|",
+#                       col_names = FALSE)
+# lob_issue <- plyr::rename(lob_issue, c('X1' = "SI_ID", "X2" = "Uniqid", 
+#                                  "X3" = "IssueID", "X4" = "Issue", 
+#                                  "X5" = "SpecificIssue", "X6" = "Year"))
+# lob_lobbyist <- read_csv("lob_lobbyist.txt", quote ="|,|",
+#                          col_names = FALSE)
+# lob_lobbyist <- plyr::rename(lob_lobbyist, c('X1' = "Uniqid", "X2" = "Lobbyist_raw", 
+#                                        "X3" = "Lobbyist", "X4" = "Lobbyist_id", 
+#                                        "X5" = "Year", "X6" = "OfficialPosition", "X7" = "CID", 
+#                                        "X8" = "Formercongmem"))
+# lob_agency <- read_csv("lob_agency.txt", quote ="|,|",
+#                        col_names = FALSE)
+# lob_agency <- plyr::rename(lob_agency, c('X1' = "Uniqid", "X2" = "AgencyID", 
+#                                    "X3" = "Agency"))
+```
+
+```{r}
+merge_df <- inner_join(lob_lobbying, lob_lobbyist, by = "Uniqid")
+```
+
+```{r}
+merge_df <- inner_join(merge_df, lob_issue, by = "Uniqid")
+```
+
+
+```{r}
+df_2019 <- merge_df %>%
+  filter(Year.x == 2019)  
+```
+
+```{r}
+names2019 <- df_2019 %>%
+  select(Lobbyist_id, Lobbyist, Issue, Registrant, Client, Uniqid) %>%
+  dplyr::distinct(Uniqid, .keep_all = TRUE)
+```
+
+```{r}
+agg2019_lobby <- df_2019 %>%
+  dplyr::select(Uniqid, Amount) 
+agg2019_lobby <- aggregate(. ~ Uniqid, data = agg2019_lobby, FUN = sum)
+```
+
+```{r}
+agg2019_lobby <- full_join(names2019, agg2019_lobby, by = "Uniqid") 
+head(agg2019_lobby)
+```
+
+
+**By Lobbyist**
+
+```{r}
+agg2019_lobbyist <- agg2019_lobby %>%
+  select(Lobbyist_id, Amount) %>%
+  group_by(Lobbyist_id) %>%
+  summarise_each(funs(if(is.numeric(.)) sum(., na.rm = TRUE) else first(.)))
+agg2019_lobbyist <- left_join(agg2019_lobbyist, agg2019_lobby, by = "Lobbyist_id") 
+agg2019_lobbyist <- agg2019_lobbyist [ -7]
+```
+
+
+```{r}
+agg2019_lobbyist <- top_n(agg2019_lobbyist, 100, wt = Amount.x)
+```
+
+
+**By Client**
+
+```{r}
+agg2019_client <- agg2019_lobby %>%
+  select(Client, Amount) %>%
+  group_by(Client) %>%
+  summarise_each(funs(if(is.numeric(.)) sum(., na.rm = TRUE) else first(.))) %>%
+  top_n(25, wt = Amount)
+agg2019_client <- left_join(agg2019_client, agg2019_lobby, by = "Client") 
+agg2019_client <- agg2019_client [ -7]
+```
+
+**Social Network Analysis**
+
+```{r}
+library(visNetwork)
+library(networkD3)
+library(htmlwidgets)
+library(curl)
+library(network)
+library(igraph)
+```
+
+**By Lobbyist**
+
+Where does the top lobbyists work?
+
+```{r}
+lobby_id <- agg2019_lobbyist %>%
+  distinct(Lobbyist) %>%
+  dplyr::rename(label = Lobbyist)
+```
+
+```{r}
+registrant <- agg2019_lobbyist %>%
+  distinct(Registrant) %>%
+  dplyr::rename(label = Registrant)
+```
+
+```{r}
+issue <- agg2019_lobbyist %>%
+  distinct(Issue) %>%
+  dplyr::rename(label = Issue)
+```
+
+```{r}
+nodes <- full_join(lobby_id, registrant, by = "label") %>% 
+  rowid_to_column("id")
+nodes
+```
+
+```{r}
+lobby_issue <- agg2019_lobbyist %>%  
+  group_by(Lobbyist, Registrant) %>%
+  dplyr::summarise(weight = n()) %>% 
+  ungroup()
+```
+
+```{r}
+edges <- lobby_issue %>% 
+  left_join(nodes, by = c("Lobbyist" = "label")) %>% 
+  dplyr::rename(from = id)
+edges <- edges %>% 
+  left_join(nodes, by = c("Registrant" = "label")) %>% 
+  dplyr::rename(to = id)
+edges <- select(edges, from, to, weight)
+```
+
+```{r}
+nodes_d3 <- mutate(nodes, id = id - 1)
+edges_d3 <- mutate(edges, from = from - 1, to = to - 1)
+```
+
+```{r}
+network <- sankeyNetwork(Links = edges_d3, Nodes = nodes_d3, Source = "from", Target = "to", 
+              NodeID = "label", Value = "weight", unit = "Lobbied For", fontSize=16,
+              width=1500, height=1500,
+              margin = list("left"=100))
+network
+```
+
+**By client**
+
+```{r}
+lobby_id2 <- agg2019_client %>%
+  distinct(Client) %>%
+  dplyr::rename(label = Client)
+```
+
+```{r}
+issue2 <- agg2019_client %>%
+  distinct(Issue) %>%
+  dplyr::rename(label = Issue)
+```
+
+```{r}
+nodes2 <- full_join(lobby_id2, issue2, by = "label") %>% 
+  rowid_to_column("id")
+nodes2
+```
+
+```{r}
+lobby_issue2 <- agg2019_client %>%  
+  group_by(Client, Issue) %>%
+  dplyr::summarise(weight = n()) %>% 
+  ungroup()
+```
+
+```{r}
+edges2 <- lobby_issue2 %>% 
+  left_join(nodes2, by = c("Client" = "label")) %>% 
+  dplyr::rename(from = id)
+edges2 <- edges2 %>% 
+  left_join(nodes2, by = c("Issue" = "label")) %>% 
+  dplyr::rename(to = id)
+edges2 <- select(edges2, from, to, weight)
+```
+
+```{r}
+routes_network2 <- network(edges2, vertex.attr = nodes2, matrix.type = "edgelist", ignore.eval = FALSE)
+```
+
+```{r}
+nodes_d3_2 <- mutate(nodes2, id = id - 1)
+edges_d3_2 <- mutate(edges2, from = from - 1, to = to - 1)
+```
+
+```{r}
+forceNetwork(Links = edges_d3_2, Nodes = nodes_d3_2, Source = "from", Target = "to", 
+             NodeID = "label", Group = "id", Value = "weight", 
+             opacity = 1, fontSize = 16, zoom = TRUE)
+```
+
+```{r}
+network2 <- sankeyNetwork(Links = edges_d3_2, Nodes = nodes_d3_2, Source = "from", Target = "to", 
+              NodeID = "label", Value = "weight", unit = "Lobbied For", iterations = 100,
+              fontSize=16,
+              width=1000, height=1000,
+              margin = list("left"=100))
+network2
+```
+
