@@ -1,0 +1,441 @@
+---
+title: "Data Viz - Group I (Julia - HTML Vignette Output for GitHub)"
+output:
+  html_vignette: 
+  self_contained: false
+---
+
+*Julia Tache*
+
+*Professor Thomas Brambor*
+
+*Data Visualization - Final Project*
+
+*May 11th, 2020*
+
+Group I: Money in Politics - Spatial Analysis on Lobbying Data 
+-----------------------------------------------------------------
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+```
+
+## Maps and Spatial Analysis {.tabset}
+
+### Mapping out Number of Bills Sponsored by State
+
+**2018-2019**
+
+First, we will look at legislation data from the House of Represenatives from the 115th and 116th sessions of congress. The data on legislation and the states that sponsored each bill was found on congress.gov. We will be looking at a sample of 1000 bills from 2018-2019 (due to the nature of the accessibility of data from this website, only 1000 bills at a time could be downloaded, so these are not a random sample and should not be viewed as representative but rather as an illustration of the given data). 
+
+```{r }
+library(tidyverse) 
+
+lob_issue <- read_csv("lob_issue.txt", quote ="|,|",
+                      col_names = FALSE)
+lob_issue <- rename(lob_issue, c("SI_ID" = "X1", "Uniqid" = "X2", 
+                                 "IssueID" = "X3", "Issue" = "X4", 
+                                 "SpecificIssue" = "X5", "Year" = "X6"))
+
+lob_bills <- read_csv("lob_bills.txt", quote ="|,|",
+                      col_names = FALSE)
+lob_bills <- rename(lob_bills, c("B_ID" = "X1", "SI_ID" = "X2", 
+                                 "CongNo" = "X3", "Bill_Name" = "X4"))
+
+bills_issues <- left_join(lob_bills, lob_issue) %>% 
+  distinct(Bill_Name, .keep_all = TRUE) 
+
+bills_115 <- read_csv("115 Bills.csv")
+bills_116 <- read_csv("116 Bills.csv")
+
+bills_full_18_19 <- rbind(bills_115, bills_116)
+bills_full_18_19 <- sample_n(bills_full_18_19, 1000)
+
+bills_full_18_19$Sponsor <- as.character(str_extract_all(bills_full_18_19$Sponsor, "[A-Z]{2}"))
+bills_full_18_19$Sponsor <- as.character(str_extract_all(bills_full_18_19$Sponsor, "[A-Z]{2}")) 
+
+bills_full_18_19 <- bills_full_18_19 %>% rename("Bill_Name" = "Legislation Number")
+
+bills_full_18_19$Bill_Name <- str_replace_all(bills_full_18_19$Bill_Name, "\\s+", "")
+
+lob_bills_full_18_19 <- inner_join(bills_full_18_19, bills_issues) %>% 
+  distinct(Bill_Name, .keep_all = TRUE)
+
+```
+
+
+```{r, out.width = "50%"}
+library(leaflet)
+library(maps)
+library(tigris) 
+library(ggmap)
+library(tidyr)
+library(repurrrsive)
+library(viridis)
+
+lob_states_18_19 <- lob_bills_full_18_19 %>% group_by(Sponsor) %>%
+  summarize(`Number of Bills/State` = n())
+
+states <- states(cb = FALSE)
+
+states_merged_18_19 <- geo_join(states, lob_states_18_19, "STUSPS", "Sponsor") 
+states_merged_18_19 <- na.omit(states_merged_18_19)
+
+pal <- colorNumeric("plasma", domain = states_merged_18_19$Number.of.Bills.State)
+
+labels <- sprintf("<strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_18_19$NAME, states_merged_18_19$Number.of.Bills.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+leaflet(states_merged_18_19) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_18_19$Number.of.Bills.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of State-Sponsered Bills 2018-2019", 
+            pal = pal, 
+            values = states_merged_18_19$`Number.of.Bills.State`, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix)
+
+```
+
+It looks like the number of bills per state introduced through or supported by lobbying varies greatly, with larger states generally sponsoring more bills. 
+
+**2015-2016**
+
+Now, we will look at legislation data from the House of Represenatives from the 114th session of congress, during the Presidential election year (2015-2016). Once again, the sample of bills is n = 1000. 
+
+```{r, out.width = "50%"}
+
+bills_114 <- read_csv("114 Bills.csv")
+
+bills_114$Sponsor <- as.character(str_extract_all(bills_114$Sponsor, "[A-Z]{2}"))
+bills_114$Sponsor <- as.character(str_extract_all(bills_114$Sponsor, "[A-Z]{2}")) 
+
+bills_114 <- bills_114 %>% rename("Bill_Name" = "Legislation Number")
+
+bills_114$Bill_Name <- str_replace_all(bills_114$Bill_Name, "\\s+", "")
+
+lob_bills_full_15_16 <- inner_join(bills_114, bills_issues) %>% 
+  distinct(Bill_Name, .keep_all = TRUE)
+
+lob_states_15_16 <- lob_bills_full_15_16 %>% group_by(Sponsor) %>%
+  summarize(`Number of Bills/State` = n()) 
+
+states_merged_15_16 <- geo_join(states, lob_states_15_16, "STUSPS", "Sponsor") 
+states_merged_15_16 <- na.omit(states_merged_15_16)
+
+pal <- colorNumeric("plasma", domain = states_merged_15_16$Number.of.Bills.State)
+
+labels <- sprintf("<strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_15_16$NAME, states_merged_15_16$Number.of.Bills.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+leaflet(states_merged_15_16) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_15_16$Number.of.Bills.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of State-Sponsered Bills 2015-2016", 
+            pal = pal, 
+            values = states_merged_15_16$`Number.of.Bills.State`, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix)  
+
+```
+
+It looks like there are generally more bills sponsored through lobbying during the election year possibly because the passage of new laws in favor of a certain constituency would lead voters to support politicians passing these laws. Given the unique nature of the 2016 election, new bills may have been proposed which would have attempted to make President Donald Trump easier or harder to elect, to limit his powers, etc. Let's look at how the issues that each bill addresses differ through each state.  
+
+### Mapping out Issues per State 
+
+**2018-2019**
+
+```{r, out.width = "50%"}
+lob_issues_18_19 <- lob_bills_full_18_19 %>% 
+  group_by(Sponsor, Issue) %>%
+  summarize(`Number of Issues/State` = n()) %>%
+  group_by(Sponsor) %>%
+  arrange(`Number of Issues/State`) %>%  
+  filter(`Number of Issues/State` %in% range(`Number of Issues/State`)) %>% 
+  group_by(Sponsor) %>%
+  arrange(`Number of Issues/State`) %>%
+  # in case of ties
+  slice(if (length(`Number of Issues/State`) == 50) 50 else c(50, n())) 
+
+states_merged_18_19 <- geo_join(states, lob_issues_18_19, "STUSPS", "Sponsor") 
+states_merged_18_19 <- na.omit(states_merged_18_19)
+
+pal <- colorNumeric("plasma", domain = states_merged_18_19$Number.of.Issues.State)
+
+labels <- sprintf("<strong>%s</strong><br/><strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_18_19$NAME,
+                  states_merged_18_19$Issue, states_merged_18_19$Number.of.Issues.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+leaflet(states_merged_18_19) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_18_19$Number.of.Issues.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of Issues/State 2018-2019", 
+            pal = pal, 
+            values = states_merged_18_19$`Number.of.Issues.State`, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix) 
+
+```
+Taxes appear to be the most common area that bills cover. 
+
+**2015-2016** 
+
+```{r, out.width = "50%"}
+
+lob_issues_15_16 <- lob_bills_full_15_16 %>% 
+  group_by(Sponsor, Issue) %>%
+  summarize(`Number of Issues/State` = n()) %>%
+  group_by(Sponsor) %>%
+  arrange(`Number of Issues/State`) %>%  
+  filter(`Number of Issues/State` %in% range(`Number of Issues/State`)) %>% 
+  group_by(Sponsor) %>%
+  arrange(`Number of Issues/State`) %>%
+  slice(if (length(`Number of Issues/State`) == 50) 50 else c(50, n()))
+
+states_merged_15_16 <- geo_join(states, lob_issues_15_16, "STUSPS", "Sponsor") 
+states_merged_15_16 <- na.omit(states_merged_15_16)
+
+pal <- colorNumeric("plasma", domain = states_merged_15_16$Number.of.Issues.State)
+
+labels <- sprintf("<strong>%s</strong><br/><strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_15_16$NAME,
+                  states_merged_15_16$Issue, states_merged_15_16$Number.of.Issues.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+leaflet(states_merged_15_16) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_15_16$Number.of.Issues.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of Issues/State 2018-2019", 
+            pal = pal, 
+            values = states_merged_15_16$`Number.of.Issues.State`, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix) 
+
+```
+
+Taxes were still highly represented, but there was a bit more variety during the election year. In California, the most bills passed were for Energy & Nuclear Power and in Texas, most bills passed were for Health Issues.
+
+### Mapping out Congressmen-turned-Lobbyists by State 
+
+Now let's look at how many former congressmen became lobbyists and which states they came from. 
+
+```{r, out.width = "50%"}
+lob_lobbyist <- read_csv("lob_lobbyist.txt", quote ="|,|",
+                         col_names = FALSE)
+lob_lobbyist <- rename(lob_lobbyist, c("Uniqid" = "X1", "Lobbyist_raw" = "X2", 
+                                       "Lobbyist" = "X3", "Lobbyist_id" = "X4", 
+                                       "Year" = "X5", "OfficialPosition" = "X6", "CID" = "X7", 
+                                       "Formercongmem" = "X8"))
+
+congressmen <- read_csv("legislators-historical.csv")
+
+congressmen$name <- paste(congressmen$last_name, congressmen$first_name, sep = ", ")
+
+former_congressmen <- lob_lobbyist %>% filter(Formercongmem == "y")
+
+former_congressmen <- former_congressmen %>%
+  rename("name" = "Lobbyist")
+
+full_congressmen <- left_join(former_congressmen, congressmen)
+
+number_congressmen <- full_congressmen %>% group_by(state) %>%
+  summarize(`Number of Congressmen/State` = n())
+
+states_merged_congressmen <- geo_join(states, number_congressmen, "STUSPS", "state") 
+states_merged_congressmen <- na.omit(states_merged_congressmen)
+
+pal <- colorNumeric("plasma", domain = states_merged_congressmen$Number.of.Congressmen.State)
+
+labels <- sprintf("<strong>%s</strong><br/>%g Former Congressmen now Lobbyists",
+                  states_merged_congressmen$NAME,
+                  states_merged_congressmen$Number.of.Congressmen.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+leaflet(states_merged_congressmen) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_congressmen$Number.of.Congressmen.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of Congressmen/State", 
+            pal = pal, 
+            values = states_merged_congressmen$Number.of.Congressmen.State, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix)
+
+```
+
+As the saying goes, everything's bigger in Texas- over 3,000 lobbyists in the dataset once served in congress there. Let's see who these congressmen are, what kind of agencies they lobbied to, and who their clients are.
+
+### Lobbyists and Lobbying Agencies in Texas 
+
+```{r }
+library(plotly)
+library(ggthemes)
+
+lob_agency <- read_csv("lob_agency.txt", quote ="|,|",
+                       col_names = FALSE)
+lob_agency <- plyr::rename(lob_agency, c('X1' = "Uniqid", "X2" = "AgencyID", 
+                                   "X3" = "Agency"))
+
+tx_congressmen <- full_congressmen %>% filter(state == "TX")
+
+tx_congressmen_full <- left_join(tx_congressmen, lob_agency) 
+
+tx_agency_count <- tx_congressmen_full %>% 
+  group_by(Agency) %>%
+  dplyr::summarize(n = n()) %>%
+  filter(n > 100) 
+
+ggplot(tx_agency_count, aes(x = "", y = n, fill = Agency)) +
+geom_bar(width = 1, stat = "identity") + coord_polar("y", start=0) + 
+  scale_fill_viridis(option = "plasma", discrete = TRUE)
+
+tx_agency_count <- tx_congressmen_full %>%
+  group_by(party) %>%
+  dplyr::mutate(`Party Members` = n()) %>%
+  group_by(Agency) %>%
+  dplyr::mutate(`Number of Agencies` = n()) %>%
+  filter(`Number of Agencies` > 100)
+
+ tx_congressmen_full %>%
+   group_by(name, party) %>%
+   dplyr::summarize(`Party Members` = n())
+# get a sense of who is a Republican and who is a Democrat 
+
+barplot_agency <- ggplot(tx_agency_count, aes(x = party, y = "", fill = Agency)) +
+geom_bar(width = 1, stat = "identity") + 
+  scale_fill_viridis(option = "plasma", discrete = TRUE) +
+  theme_tufte() + 
+  theme(axis.text.x=element_text(angle=45,size = rel(0.75), 
+                                 margin = margin(1, unit = "cm"), vjust = 1)) +
+  xlab("Party") + ylab("")
+
+ggplotly(barplot_agency)
+
+barplot_congressmen <- ggplot(tx_agency_count, aes(x = name, y = "", fill = Agency)) +
+geom_bar(width = 1, stat = "identity") + 
+  scale_fill_viridis(option = "plasma", discrete = TRUE) +
+  theme_tufte() + 
+  theme(axis.text.x=element_text(angle=45,size = rel(0.75), 
+                                 margin = margin(1, unit = "cm"), vjust = 1)) +
+  xlab("Congressmen") + ylab("")
+
+ggplotly(barplot_congressmen)
+
+lob_lobbying <- read_csv("lob_lobbying.txt", quote ="|,|",
+                         col_names = FALSE)
+lob_lobbying <- plyr::rename(lob_lobbying, c('X1' = "Uniqid", "X2" = "Registrant_raw", 
+                                        "X3" = "Registrant", "X4" = "Isfirm", 
+                                        "X5" = "Client_raw", "X6" = "Client", "X7" = "Ultorg", 
+                                        "X8" = "Amount", "X9" = "Catcode", "X10" = "Source", 
+                                        "X11" = "Self", "X12" = "IncludeNSFS", "X13" = "Use", 
+                                        "X14" = "Ind", "X15" = "Year", "X16" = "Type", 
+                                        "X17" = "Typelong", "X18" = "Affiliate"))
+
+tx_congressmen_clients <- left_join(tx_congressmen, lob_lobbying) 
+
+tx_client_count <- tx_congressmen_clients %>% 
+  group_by(Client) %>%
+  dplyr::mutate(n = n()) %>%
+  filter(n > 45) # top 6 largest clients
+
+ggplot(tx_client_count, aes(x = "", y = n, fill = Client)) +
+geom_bar(width = 1, stat = "identity") + coord_polar("y", start=0) + 
+  scale_fill_viridis(option = "plasma", discrete = TRUE) 
+
+```
+
+Most Texan former congressmen now lobbyists lobby to congress, with a sizable chunk lobbying to various departments such as Defense, Agriculture, and Education. This suggests a "revolving door" of congressmen entering politics as elected officials and eventually influencing legislation through money. Interestingly enough, most Texan congressmen are Democrats; they likely lobby in favor of progressive policies within a red state. Looking at clients, the top 6 seem to have similar numbers of bills on behalf of their interests, with all of the companies relating to agriculture. 
