@@ -1,0 +1,559 @@
+---
+title: "Group I: Money in Politics "
+author: "Elliott Tran, Julia Tache and Sayali Nagwekar "
+date: 
+output: html_document
+runtime: shiny
+---
+
+```{r packages and data, message = FALSE, warning = FALSE, echo=FALSE}
+packages <- c("shiny", "devtools", "tidytext", "SnowballC", "wordcloud",
+ "lsa", "tidyverse", "httr"," ggplot2", "leaflet"," maps", "tigris"," ggmap", "repurrrsive", "viridis", "visNetwork",
+ "networkD3", "htmlwidgets", "shinythemes", "dygraphs"," url", "network", "ggthemes")
+
+packages <- lapply(packages, FUN = function(x) {
+  if(!require(x, character.only = TRUE)) {
+    install.packages(x)
+    library(x, character.only = TRUE)
+  }
+})
+
+
+
+lob_issue <- read_csv("./data/lob_issue.txt", quote ="|,|",
+                      col_names = FALSE)
+lob_issue <- plyr::rename(lob_issue, c('X1' = "SI_ID", "X2" = "Uniqid", 
+                                       "X3" = "IssueID", "X4" = "Issue", 
+                                       "X5" = "SpecificIssue", "X6" = "Year"))
+
+
+lob_lobbying <- read_csv("./data/lob_lobbying.txt", quote ="|,|",
+                         col_names = FALSE)
+
+
+lob_lobbying <- plyr::rename(lob_lobbying, c('X1' = "Uniqid", "X2" = "Registrant_raw", 
+                                             "X3" = "Registrant", "X4" = "Isfirm", 
+                                             "X5" = "Client_raw", "X6" = "Client", "X7" = "Ultorg", 
+                                             "X8" = "Amount", "X9" = "Catcode", "X10" = "Source", 
+                                             "X11" = "Self", "X12" = "IncludeNSFS", "X13" = "Use", 
+                                             "X14" = "Ind", "X15" = "Year", "X16" = "Type", 
+                                             "X17" = "Typelong", "X18" = "Affiliate"))
+
+
+lob_lobbyist <- read_csv("./data/lob_lobbyist.txt", quote ="|,|",
+                         col_names = FALSE)
+lob_lobbyist <- plyr::rename(lob_lobbyist, c('X1' = "Uniqid", "X2" = "Lobbyist_raw", 
+                                             "X3" = "Lobbyist", "X4" = "Lobbyist_id", 
+                                             "X5" = "Year", "X6" = "OfficialPosition", "X7" = "CID", 
+                                             "X8" = "Formercongmem"))
+
+
+lob_bills <- read_csv("./data/lob_bills.txt", quote ="|,|",
+                      col_names = FALSE)
+
+lob_bills <- rename(lob_bills, c("B_ID" = "X1", "SI_ID" = "X2", 
+                                 "CongNo" = "X3", "Bill_Name" = "X4"))
+
+
+
+```
+
+```{r time series and sna, include=FALSE, results='hide', warning=FALSE}
+
+# Time Series
+
+open_secrets <- inner_join(lob_lobbying, lob_lobbyist, by = c('Uniqid', 'Year')) 
+
+open_secrets <- open_secrets %>%
+  select(Year, Uniqid, Lobbyist_id, Client) %>%
+  filter(Year >= 2015)
+
+  
+ts_report <- open_secrets %>%
+  select(Uniqid, Year) %>%
+  distinct(Uniqid, .keep_all = TRUE) %>%
+  mutate(Uniqid = 1) %>%  
+  group_by(Year) %>% 
+  summarise_each(funs(sum)) %>%
+  rename("Number of Lobbying Reports" = "Uniqid")
+  
+
+ts_lobbyists <- open_secrets %>%
+  select(Lobbyist_id, Year) %>%
+  distinct(Lobbyist_id, .keep_all = TRUE) %>%
+  mutate(Lobbyist_id = 1) %>%  
+  group_by(Year) %>% 
+  summarise_each(funs(sum)) %>%
+  rename("Number of Lobbyists" = "Lobbyist_id")
+
+ts_clients <- open_secrets %>%
+  select(Client, Year) %>%
+  distinct(Client, .keep_all = TRUE) %>%
+  mutate(Client = 1) %>%  
+  group_by(Year) %>% 
+  summarise_each(funs(sum)) %>%
+  rename("Number of Clients" = "Client")
+
+
+time_seriesg <- full_join(ts_clients, ts_lobbyists, by = "Year") 
+
+time_seriesg <- full_join(ts_report, time_seriesg, by = "Year")
+
+time_seriesg$Year <- as.single(time_seriesg$Year)
+
+
+# Social Network Analysis
+
+merge_df <- inner_join(lob_lobbying, lob_issue, by = c("Uniqid","Year"))
+merge_df2 <- inner_join(merge_df, lob_lobbyist, by = c("Uniqid","Year"))
+
+df_2019 <- merge_df2 %>% 
+  filter(Year == 2019)  
+
+names2019 <- df_2019 %>%
+  select(Lobbyist_id, Lobbyist, Issue, Registrant, Client, Uniqid) %>%
+  dplyr::distinct(Uniqid, .keep_all = TRUE)
+
+agg2019_lobby <- df_2019 %>%
+  dplyr::select(Uniqid, Amount) 
+
+
+agg2019_lobby <- aggregate(. ~ Uniqid, data = agg2019_lobby, FUN = sum)
+
+agg2019_lobby <- full_join(names2019, agg2019_lobby, by = "Uniqid")
+
+## By Lobbyist
+
+names2019_2 <- df_2019 %>%
+  select(Lobbyist_id, Lobbyist, Registrant, Client) %>%
+  dplyr::distinct(Lobbyist_id, .keep_all = TRUE)
+
+agg2019_lobby2 <- df_2019 %>%
+  filter(Isfirm == "y") %>%
+  dplyr::select(Lobbyist_id, Amount) 
+
+agg2019_lobby2 <- aggregate(. ~ Lobbyist_id, data = agg2019_lobby2, FUN = sum)
+
+agg2019_lobby2 <- full_join(names2019_2, agg2019_lobby2, by = "Lobbyist_id") 
+
+
+agg2019_lobbyist <- agg2019_lobby2 %>%
+  select(Lobbyist_id, Amount) %>%
+  group_by(Lobbyist_id) %>%
+  summarise_each(funs(if(is.numeric(.)) sum(., na.rm = TRUE) else first(.)))
+
+agg2019_lobbyist <- left_join(agg2019_lobbyist, agg2019_lobby2, by = "Lobbyist_id") 
+
+
+agg2019_lobbyist <- top_n(agg2019_lobbyist, 50, wt = Amount.x)
+
+lobby_id <- agg2019_lobbyist %>%
+  distinct(Lobbyist) %>%
+  dplyr::rename(label = Lobbyist)
+
+registrant <- agg2019_lobbyist %>%
+  distinct(Registrant) %>%
+  dplyr::rename(label = Registrant)
+
+nodes <- full_join(lobby_id, registrant, by = "label") %>% 
+  rowid_to_column("id")
+
+lobby_issue <- agg2019_lobbyist %>%  
+  group_by(Lobbyist, Registrant) %>%
+  dplyr::summarise(weight = n()) %>% 
+  ungroup()
+
+edges <- lobby_issue %>% 
+  left_join(nodes, by = c("Lobbyist" = "label")) %>% 
+  dplyr::rename(from = id)
+
+edges <- edges %>% 
+  left_join(nodes, by = c("Registrant" = "label")) %>% 
+  dplyr::rename(to = id)
+
+edges <- select(edges, from, to, weight)
+
+nodes_d3 <- mutate(nodes, id = id - 1)
+
+edges_d3 <- mutate(edges, from = from - 1, to = to - 1)
+
+
+## By Client
+
+agg2019_client <- agg2019_lobby %>%
+  select(Client, Amount) %>%
+  group_by(Client) %>%
+  summarise_each(funs(if(is.numeric(.)) sum(., na.rm = TRUE) else first(.))) %>%
+  top_n(25, wt = Amount)
+
+agg2019_client <- left_join(agg2019_client, agg2019_lobby, by = "Client") 
+
+lobby_id2 <- agg2019_client %>%
+  distinct(Client) %>%
+  dplyr::rename(label = Client)
+
+issue2 <- agg2019_client %>%
+  distinct(Issue) %>%
+  dplyr::rename(label = Issue)
+
+nodes2 <- full_join(lobby_id2, issue2, by = "label") %>% 
+  rowid_to_column("id")
+
+lobby_issue2 <- agg2019_client %>%  
+  group_by(Client, Issue) %>%
+  dplyr::summarise(weight = n()) %>% 
+  ungroup()
+
+edges2 <- lobby_issue2 %>% 
+  left_join(nodes2, by = c("Client" = "label")) %>% 
+  dplyr::rename(from = id)
+
+edges2 <- edges2 %>% 
+  left_join(nodes2, by = c("Issue" = "label")) %>% 
+  dplyr::rename(to = id)
+
+edges2 <- select(edges2, from, to, weight)
+
+nodes_d3_2 <- mutate(nodes2, id = id - 1)
+
+edges_d3_2 <- mutate(edges2, from = from - 1, to = to - 1)
+
+
+```
+
+```{r gis,  include=FALSE, results='hide', warning=FALSE}
+# Bills
+lob_bills$SI_ID <- as.character(lob_bills$SI_ID)
+
+lob_issue$SI_ID <- as.character(lob_issue$SI_ID)
+
+bills_issues <- left_join(lob_bills, lob_issue) %>% 
+  distinct(Bill_Name, .keep_all = TRUE) 
+
+bills_115 <- read_csv("./data/115 Bills.csv")
+bills_116 <- read_csv("./data/116 Bills.csv")
+
+bills_full_18_19 <- rbind(bills_115, bills_116)
+bills_full_18_19 <- sample_n(bills_full_18_19, 1000)
+
+bills_full_18_19$Sponsor <- as.character(str_extract_all(bills_full_18_19$Sponsor, "[A-Z]{2}"))
+bills_full_18_19$Sponsor <- as.character(str_extract_all(bills_full_18_19$Sponsor, "[A-Z]{2}")) 
+
+bills_full_18_19 <- bills_full_18_19 %>% rename("Bill_Name" = "Legislation Number")
+
+bills_full_18_19$Bill_Name <- str_replace_all(bills_full_18_19$Bill_Name, "\\s+", "")
+
+lob_bills_full_18_19 <- inner_join(bills_full_18_19, bills_issues) %>% 
+  distinct(Bill_Name, .keep_all = TRUE)
+
+lob_states_18_19 <- lob_bills_full_18_19 %>% group_by(Sponsor) %>%
+  summarize(`Number of Bills/State` = n())
+
+states <- states(cb = FALSE)
+
+states_merged_18_19 <- geo_join(states, lob_states_18_19, "STUSPS", "Sponsor") 
+states_merged_18_19 <- na.omit(states_merged_18_19)
+
+pal <- colorNumeric("plasma", domain = states_merged_18_19$Number.of.Bills.State)
+
+labels <- sprintf("<strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_18_19$NAME, states_merged_18_19$Number.of.Bills.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+
+
+bills_114 <- read_csv("./data/114 Bills.csv")
+
+bills_114$Sponsor <- as.character(str_extract_all(bills_114$Sponsor, "[A-Z]{2}"))
+bills_114$Sponsor <- as.character(str_extract_all(bills_114$Sponsor, "[A-Z]{2}")) 
+
+bills_114 <- bills_114 %>% rename("Bill_Name" = "Legislation Number")
+
+bills_114$Bill_Name <- str_replace_all(bills_114$Bill_Name, "\\s+", "")
+
+lob_bills_full_15_16 <- inner_join(bills_114, bills_issues) %>% 
+  distinct(Bill_Name, .keep_all = TRUE)
+
+lob_states_15_16 <- lob_bills_full_15_16 %>% group_by(Sponsor) %>%
+  summarize(`Number of Bills/State` = n()) 
+
+states_merged_15_16 <- geo_join(states, lob_states_15_16, "STUSPS", "Sponsor") 
+states_merged_15_16 <- na.omit(states_merged_15_16)
+
+pal <- colorNumeric("plasma", domain = states_merged_15_16$Number.of.Bills.State)
+
+labels <- sprintf("<strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_15_16$NAME, states_merged_15_16$Number.of.Bills.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+
+
+# Issues by State
+
+lob_issues_18_19 <- lob_bills_full_18_19 %>% 
+  group_by(Sponsor, Issue) %>%
+  summarize(`Number of Issues/State` = n()) %>%
+  group_by(Sponsor) %>%
+  arrange(`Number of Issues/State`) %>%  
+  filter(`Number of Issues/State` %in% range(`Number of Issues/State`)) %>% 
+  group_by(Sponsor) %>%
+  arrange(`Number of Issues/State`) %>%
+  # in case of ties
+  slice(if (length(`Number of Issues/State`) == 50) 50 else c(50, n())) 
+
+states_merged_18_19 <- geo_join(states, lob_issues_18_19, "STUSPS", "Sponsor") 
+states_merged_18_19 <- na.omit(states_merged_18_19)
+
+pal1 <- colorNumeric("plasma", domain = states_merged_18_19$Number.of.Issues.State)
+
+labels <- sprintf("<strong>%s</strong><br/><strong>%s</strong><br/>%g Bills Sponsored",
+                  states_merged_18_19$NAME,
+                  states_merged_18_19$Issue, states_merged_18_19$Number.of.Issues.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+
+
+# former lobbyists
+
+congressmen <- read_csv("./data/legislators-historical.csv")
+
+congressmen$name <- paste(congressmen$last_name, congressmen$first_name, sep = ", ")
+
+former_congressmen <- lob_lobbyist %>% filter(Formercongmem == "y")
+
+former_congressmen <- former_congressmen %>%
+  rename("name" = "Lobbyist")
+
+full_congressmen <- left_join(former_congressmen, congressmen)
+
+number_congressmen <- full_congressmen %>% group_by(state) %>%
+  summarize(`Number of Congressmen/State` = n())
+
+states_merged_congressmen <- geo_join(states, number_congressmen, "STUSPS", "state") 
+states_merged_congressmen <- na.omit(states_merged_congressmen)
+
+pal <- colorNumeric("plasma", domain = states_merged_congressmen$Number.of.Congressmen.State)
+
+labels <- sprintf("<strong>%s</strong><br/>%g Former Congressmen now Lobbyists",
+                  states_merged_congressmen$NAME,
+                  states_merged_congressmen$Number.of.Congressmen.State) %>% 
+  lapply(htmltools::HTML)
+
+css_fix <- "div.info.legend.leaflet-control br {clear: both;}" # CSS to correct spacing of legend
+html_fix <- htmltools::tags$style(type = "text/css", css_fix)  # Convert CSS to HTML
+
+
+
+```
+
+
+```{r nlp, include=FALSE, results='hide', warning=FALSE}
+
+lobby2 <- tibble(file = paste0(c("./data/lob_indus.txt"))) %>%
+        mutate(text = purrr::map(file, read_lines)) %>%
+        unnest() %>%
+        group_by(file = str_sub(basename(file), 1, -5)) %>% 
+        mutate(line_number = row_number()) %>%
+        ungroup() %>%
+        unnest_tokens(word, text) %>% 
+        anti_join(stop_words) %>% ## remove stop words 
+        mutate(word = wordStem(word)) ## stemming the words
+
+lobby2_sentiment <- lobby2 %>%
+        inner_join(get_sentiments("bing")) %>%
+        count(word, sentiment, sort = TRUE) %>%
+        ungroup()
+
+lobby2_sentiment <- lobby2_sentiment %>%
+        group_by(sentiment) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = sentiment)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~sentiment, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL, title = "Positive and Negative Sentiment by Lobbying Industry") +
+        coord_flip()
+
+nrc_disgust <- get_sentiments("nrc") %>% 
+        filter(sentiment == "disgust")
+
+sent2_disgust <- lobby2 %>%
+        inner_join(nrc_disgust) %>%
+        count(word, sort = TRUE)
+
+
+sent2_disgust <- sent2_disgust %>%
+        group_by(n) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n, fill = n)) +
+        geom_col(show.legend = FALSE) +
+        facet_wrap(~n, scales = "free_y") +
+        labs(y = "Contribution to sentiment",
+                x = NULL, title = "NRC Disgust Sentiment by Lobbying Industry") +
+        coord_flip()
+```
+
+
+```{r app, echo=FALSE, cache=FALSE, eval=TRUE}
+ui <- fluidPage(
+  tagList(
+    navbarPage(
+      theme = shinythemes::shinytheme("cerulean"), 
+      "U.S. Lobbying Practices",
+      
+      tabPanel("Overview", dygraphOutput("timeseries", width="800px", height="500px"),
+               hr(),
+               "We are interested in exploring lobbying reports submitted in compliance with the U.S. Lobbying Disclosure Act of 1995 (LDA) to find insights on how money influences the political process. Utilizing 7 datasets regarding LDA from Open Secrets, we will explore the unique structures and relationships of lobbying in politics. We decided to examine lobbying efforts, key players, and the effects lobbying has on legislation and compare state sponsors and issues between 2018-2019 and the election year of 2015-2016.",
+               hr(),
+               strong("Group I: Money in Politics"), "- Elliott Tran, Julia Tache and Sayali Nagwekar",
+               br(),
+               tags$a(href="https://www.opensecrets.org/federal-lobbying/methodology", "Click for information about the Dataset"),
+               br(),
+               tags$a(href="https://drive.google.com/open?id=1bm3iycbE_5RC8SAwTj41A5_IIITi-45e", "Process Book"),
+               br(),
+               tags$a(href="https://drive.google.com/open?id=1a12htA6JheAVKNCVe9BkwpOqxb_l5Z7k", "Code Files"),
+               ),
+      
+      tabPanel("By Lobbyist", 
+               h3("Where do the top out-of-house lobbyists work? (2019)"),
+               br(),
+               "Top lobbyists were determined by the amount spent in lobbying efforts connected to their name in 2019.",
+               sankeyNetworkOutput("sna2", width="800px", height="800px"),
+               h3("Mapping out Congressmen-turned-Lobbyists by State"),
+               br(),
+               "A look at how many former congressmen became lobbyists and which states they came from.",
+               leafletOutput("formercon", width="800px", height="800px")
+
+               ),
+              
+      tabPanel("By Lobbying Client", 
+               h3("What are the top lobbying clients lobbying for? (2019)"),
+               br(),
+               "Top clients were determined by the amount spent in lobbying efforts connected to their name in 2019.",
+               sankeyNetworkOutput("sna",width="800px", height="800px"),
+               h3("Text Analysis of the Clients' Industries"),
+               plotOutput("bing",width="800px", height="800px"),
+               plotOutput("nrc",width="800px", height="800px")
+               ),
+      
+      tabPanel("By Bills and Issues", 
+               "There are generally more bills sponsored through lobbying during the election year possibly because the passage of new laws in favor of a certain constituency would lead voters to support politicians passing these laws. Given the unique nature of the 2016 election, new bills may have been proposed which would have attempted to make President Donald Trump easier or harder to elect, to limit his powers, etc. Let's look at how the issues that each bill addresses differ through each state.",
+               h3("Mapping out Issues per State - 2018-2019"),
+               leafletOutput("issue1", width="800px", height="800px"),
+               )
+    )))
+
+
+
+
+server <- function(input, output) {
+    
+
+  output$timeseries <- renderDygraph({
+    dygraph(time_seriesg, main = "U.S. Lobbying Landscape in the Last 5 Years") %>%
+      dyAxis("x", drawGrid = FALSE, label = FALSE, axisLabelWidth = 0) %>%
+      dyOptions(digitsAfterDecimal = 0, strokeWidth = 3, colors = RColorBrewer::brewer.pal(3, "Set2"))
+    })
+  
+  output$sna2 <- renderSankeyNetwork({
+    sankeyNetwork(Links = edges_d3, Nodes = nodes_d3, Source = "from", Target = "to", 
+                  NodeID = "label", Value = "weight", unit = "Lobbied For", iterations = 100,
+                  fontSize=16, width=1500, height=1500,
+                  margin = list("left"=100))
+    })
+
+    output$sna <- renderSankeyNetwork({
+      sankeyNetwork(Links = edges_d3_2, Nodes = nodes_d3_2, Source = "from", Target = "to", 
+                    NodeID = "label", Value = "weight", unit = "Lobbied For", iterations = 100,
+                    fontSize=16, width=1000, height=1000,
+                    margin = list("left"=100))
+    })
+    
+      output$bing <- renderPlot({(lobby2_sentiment)
+    })
+      
+       output$nrc <- renderPlot({(sent2_disgust)
+    })
+      
+        output$timeseries <- renderDygraph({
+    dygraph(time_seriesg, main = "U.S. Lobbying Landscape in the Last 5 Years") %>%
+      dyAxis("x", drawGrid = FALSE, label = FALSE, axisLabelWidth = 0) %>%
+      dyOptions(digitsAfterDecimal = 0, strokeWidth = 3, colors = RColorBrewer::brewer.pal(3, "Set2"))
+    })
+    
+    
+    output$issue1 <- renderLeaflet({
+      leaflet(states_merged_18_19) %>%
+        setView(-98.483330, 38.712046, zoom = 4) %>% 
+        addProviderTiles(providers$CartoDB.Positron) %>%
+        addPolygons(fillColor = ~pal1(states_merged_18_19$Number.of.Issues.State), 
+                    weight = 0.5, 
+                    opacity = 1, 
+                    color = "black",
+                    dashArray = "1",
+                    fillOpacity = 1, 
+                    smoothFactor = 0.2, 
+                    highlight = highlightOptions(weight = 5, 
+                                                 color = "white",
+                                                 dashArray = "",
+                                                 bringToFront = TRUE),
+                    label = labels,
+                    labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                                textsize = "15px", 
+                                                direction = "auto")) %>%
+        addLegend(title = "# of Issues/State 2018-2019", 
+                  pal = pal1, 
+                  values = states_merged_18_19$`Number.of.Issues.State`, 
+                  position = "bottomright")   
+    })
+    
+    output$formercon <- renderLeaflet({
+      leaflet(states_merged_congressmen) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(fillColor = ~pal(states_merged_congressmen$Number.of.Congressmen.State), 
+              weight = 0.5, 
+              opacity = 1, 
+              color = "black",
+              dashArray = "1",
+              fillOpacity = 1, 
+              smoothFactor = 0.2, 
+              highlight = highlightOptions(weight = 5, 
+                                           color = "white",
+                                           dashArray = "",
+                                           bringToFront = TRUE),
+              label = labels,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px", 
+                                          direction = "auto")) %>%
+  addLegend(title = "# of Congressmen/State", 
+            pal = pal, 
+            values = states_merged_congressmen$Number.of.Congressmen.State, 
+            position = "bottomright") %>% 
+  htmlwidgets::prependContent(html_fix) 
+    })
+    
+     
+     
+     
+      
+  
+}
+
+shinyApp(ui = ui, server = server, options = list(height = 800, weight = 1000))
+
+```
+
